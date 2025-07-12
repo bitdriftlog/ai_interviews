@@ -1,5 +1,10 @@
+"use client"
+
 import { cn } from "@/lib/utils"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { vapi } from "@/lib/vapi.sdk"
 
 enum CallStatus {
     INACTIVE = "INACTIVE",
@@ -8,14 +13,74 @@ enum CallStatus {
     FINISHED = "FINISHED",
 }
 
-const Agent = ({ userName }: AgentProps) => {
-    const callStatus = CallStatus.FINISHED // This would typically come from props or state
-    const isSpeaking = true
-    const messages = [
-        "What is your name?",
-        "What is your experience with React?",
-    ] // This would typically come from props or state
-    const lastMessage = messages[messages.length - 1]
+interface SavedMessage {
+    role: "user" | "system" | "assistant",
+    content: string;
+}
+
+const Agent = ({ userName, userId, type }: AgentProps) => {
+    const router = useRouter()
+    const [isSpeaking, setIsSpeaking] = useState(false)
+    const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE)
+    const [messages, setMessages] = useState<SavedMessage[]>([])
+    
+    useEffect(() => {
+      const callStart = () => setCallStatus(CallStatus.ACTIVE)
+      const callEnd = () => setCallStatus(CallStatus.FINISHED)
+
+      const onMessage = (message: Message) => {
+        if(message.type === "transcript" && message.transcriptType === "final") {
+            const newMessage = {role: message.role, content: message.transcript}
+            setMessages(prev => [...prev, newMessage])
+        }
+      }
+      const onSpeechStart = () => setIsSpeaking(true)
+      const onSpeechEnd = () => setIsSpeaking(false)
+
+      const onError = (error: Error) => {
+        console.error("Error in call:", error)
+        setCallStatus(CallStatus.INACTIVE)
+      }
+
+      vapi.on("call-start", callStart)
+      vapi.on("call-end", callEnd)
+      vapi.on("message", onMessage)
+      vapi.on("speech-start", onSpeechStart)
+      vapi.on("speech-end", onSpeechEnd)
+      vapi.on("error", onError)
+
+      return () => {
+        vapi.off("call-start", callStart)
+        vapi.off("call-end", callEnd)
+        vapi.off("message", onMessage)
+        vapi.off("speech-start", onSpeechStart)
+        vapi.off("speech-end", onSpeechEnd)
+        vapi.off("error", onError)
+      }
+    }, [])
+
+    useEffect(() => {
+        if(callStatus === CallStatus.FINISHED) router.push('/')
+    }, [messages, callStatus, type, userId])
+
+    const handleCall = async () => {
+        setCallStatus(CallStatus.CONNECTING);
+        await vapi.start(process.env.NEXT_PUBLIC_VAPI_ID!, {
+            variableValues: {
+                username: userName,
+                userid: userId,
+            }
+        })
+    }
+
+    const handleDisconnect = async () => {
+        setCallStatus(CallStatus.FINISHED);
+        vapi.stop();
+    }
+
+    const lastMessage = messages[messages.length - 1]?.content
+    const isCallInactiveOrFinished = callStatus === CallStatus.INACTIVE || callStatus === CallStatus.FINISHED;
+    
     return (
         <>
             <div className="call-view">
@@ -45,14 +110,14 @@ const Agent = ({ userName }: AgentProps) => {
             )}
             <div className="w-full flex justify-center items-center">
                 {callStatus !== "ACTIVE" ? (
-                    <button className="relative btn-call">
-                        <span className={cn('absolute animate-ping rounded-full opacity-75', callStatus !== 'CONNECTING' & 'hidden')} />
+                    <button className="relative btn-call" onClick={handleCall} disabled={callStatus === CallStatus.CONNECTING}>
+                        <span className={cn('absolute animate-ping rounded-full opacity-75', callStatus !== 'CONNECTING' && 'hidden')} />
                         <span>
-                            {callStatus === "INACTIVE" || callStatus === "FINISHED" ? "Call" : ". . ."}
+                            {isCallInactiveOrFinished ? "Call" : ". . ."}
                         </span>
                     </button>
                 ) : (
-                    <button className="btn-disconnect">
+                    <button className="btn-disconnect" onClick={handleDisconnect}>
                         <span>End Call</span>
                     </button>
                 )}

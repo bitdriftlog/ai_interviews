@@ -1,11 +1,19 @@
 import InterviewCard from '@/components/InterviewCard'
 import { Button } from '@/components/ui/button'
 import { dummyInterviews } from '@/constants'
+import { getCurrentUser, getInterviewByUserId, getLatestInterviews } from '@/lib/actions/auth.actoion'
 import Image from 'next/image'
 import Link from 'next/link'
 import React from 'react'
 
-const page = () => {
+const page = async () => {
+  const user = await getCurrentUser()
+  const [userInterviews, latestInterviews] = await Promise.all([
+    await getInterviewByUserId(user?.id!),
+    await getLatestInterviews({userId: user?.id!})
+  ])
+  const hasPassedInterviews = userInterviews && userInterviews.length > 0
+  const hasUpcomingInterviews = latestInterviews && latestInterviews.length > 0
   return (
     <>
       <section className='card-cta'>
@@ -21,17 +29,23 @@ const page = () => {
       <section className='flex flex-col gap-6 mt-8'>
         <h2>Your Interview</h2>
         <div className='interviews-section'>
-          {dummyInterviews.map((interview) => (
-            <InterviewCard {... interview} key={interview.id} />
-          ))}
+          {hasPassedInterviews ? (
+            userInterviews?.map((interview) => (
+              <InterviewCard {...interview} key={interview.id} />
+            ))) : (
+            <p>You haven&apos;t taken any interviews yet</p>
+          )}
         </div>
       </section>
       <section className='flex flex-col gap-6 mt-8'>
         <h2>Take Interview</h2>
         <div className='interviews-section'>
-          {dummyInterviews.map((interview) => (
-            <InterviewCard {... interview} key={interview.id} />
-          ))}
+          {hasUpcomingInterviews ? (
+            latestInterviews?.map((interview) => (
+              <InterviewCard {...interview} key={interview.id} />
+            ))) : (
+            <p>There is no interviews available</p>
+          )}
         </div>
       </section>
     </>

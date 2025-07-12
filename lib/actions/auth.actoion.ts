@@ -11,7 +11,7 @@ export async function signUp(params: SignUpParams) {
     try {
         const userRecord = await db.collection('users').doc(uid).get()
 
-        if(userRecord.exists) {
+        if (userRecord.exists) {
             return {
                 success: false,
                 message: "User already exists. Please sign in instead."
@@ -26,11 +26,11 @@ export async function signUp(params: SignUpParams) {
             success: true,
             message: "Account created successfully. You can now sign in."
         }
-            
+
     } catch (error: any) {
         console.error("Error signing up:", error);
-        
-        if(error.code === 'auth/email-already-in-use') {
+
+        if (error.code === 'auth/email-already-in-use') {
             return {
                 success: false,
                 message: "Email already in use. Please use a different email."
@@ -41,7 +41,7 @@ export async function signUp(params: SignUpParams) {
             success: false,
             message: "Faild to create account. Please try again later."
         }
-        
+
     }
 }
 
@@ -66,7 +66,7 @@ export async function signIn(params: SignInParams) {
     }
 }
 
-export async function setSessionCookie(idToken:string) {
+export async function setSessionCookie(idToken: string) {
     const cookieStore = await cookies();
     const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: 60 * 60 * 24 * 7 * 1000 }); // 7 days
     cookieStore.set("session", sessionCookie, {
@@ -90,10 +90,10 @@ export async function getCurrentUser(): Promise<User | null> {
         const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
         const userRecord = await db.collection('users').doc(decodedClaims.uid).get();
 
-        if(!userRecord.exists) return null;
-        
+        if (!userRecord.exists) return null;
+
         return {
-            ... userRecord.data(),
+            ...userRecord.data(),
             id: userRecord.id,
         } as User
     } catch (error) {
@@ -105,4 +105,33 @@ export async function getCurrentUser(): Promise<User | null> {
 export async function isAuthenticated() {
     const user = await getCurrentUser()
     return !!user;
+}
+
+export async function getInterviewByUserId(userId: string): Promise<Interview[] | null> {
+    const interviews = await db
+        .collection('interviews')
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+    return interviews.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+    })) as Interview[];
+
+
+}
+export async function getLatestInterviews(params: GetLatestInterviewsParams): Promise<Interview[] | null> {
+    const { userId, limit = 20 } = params;
+    const interviews = await db
+        .collection('interviews')
+        .orderBy('createdAt', 'desc')
+        .where('finalized', '==', true)
+        .where('userId', '!=', userId)
+        .limit(limit)
+        .get();
+    return interviews.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+    })) as Interview[];
+
 }
